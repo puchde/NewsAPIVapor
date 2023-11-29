@@ -79,7 +79,7 @@ struct GoogleNewsController: RouteCollection {
             let title = try e.text()
             let publishedAt = try e.getElementsByTag("time").first()?.text() ?? ""
             let source = Source(id: "", name: try e.getElementsByAttribute("data-n-tid").first()?.text() ?? "")
-            let author = ""
+            let author = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
             var url = try e.getElementsByAttribute("target").first()?.getAttributes()?.get(key: "href") ?? ""
             if !url.contains("http") && url.contains("./") {
                 url.replace("./", with: e.getBaseUri())
@@ -132,8 +132,9 @@ struct GoogleNewsController: RouteCollection {
                 return
             }
             
-            let path = try e.attr("href").replacing("./topics", with: "")
-            categoryPathArr.append((try e.text(), path))
+            let path = try e.attr("href").replacing("./topics", with: "").split(separator: "?").first
+
+            categoryPathArr.append((try e.text(), String(path ?? "path Error")))
         }
         
         // MARK: - 移除兩項(國際, 當地)分類
