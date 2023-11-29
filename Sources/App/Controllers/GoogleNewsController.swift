@@ -37,7 +37,7 @@ struct GoogleNewsController: RouteCollection {
             // MARK: - 時間內返回預存資料
             if let defualtArticlesTuple = newsManager.categoryArticles[country]?[category],
                let defualtDate = formatter.date(from: defualtArticlesTuple.date),
-               Date.now < defualtDate.addingTimeInterval(600) {
+               Date.now < defualtDate.addingTimeInterval(15 * 60) {
                 let articles = defualtArticlesTuple.articles
                 let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
                 
