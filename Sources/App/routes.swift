@@ -8,4 +8,7 @@ func routes(_ app: Application) throws {
     app.get("hello") { req async -> String in
         "Hello, world!"
     }
+    
+    let googleNewsController = GoogleNewsController()
+    try app.register(collection: googleNewsController)
 }
