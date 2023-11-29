@@ -2,6 +2,8 @@ import Vapor
 import Dispatch
 import Logging
 
+var newsManager = NewsConfigManager.shared
+
 /// This extension is temporary and can be removed once Vapor gets this support.
 private extension Vapor.Application {
     static let baseExecutionQueue = DispatchQueue(label: "vapor.codes.entrypoint")
