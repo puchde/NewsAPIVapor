@@ -9,12 +9,14 @@ let package = Package(
     dependencies: [
         // 💧 A server-side Swift web framework.
         .package(url: "https://github.com/vapor/vapor.git", from: "4.83.1"),
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.6.0")
     ],
     targets: [
         .executableTarget(
             name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
+                .product(name: "SwiftSoup", package: "SwiftSoup")
             ]
         ),
         .testTarget(name: "AppTests", dependencies: [
@@ -23,6 +25,7 @@ let package = Package(
 
             // Workaround for https://github.com/apple/swift-package-manager/issues/6940
             .product(name: "Vapor", package: "vapor"),
+            .product(name: "SwiftSoup", package: "SwiftSoup")
         ])
     ]
 )
