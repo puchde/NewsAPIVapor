@@ -10,6 +10,8 @@ import Vapor
 import SwiftSoup
 
 class NewsConfigManager {
+    typealias cArticles = [Category: (date: String, articles :[Article])]
+    
     static let shared = NewsConfigManager()
     private init() { }
     
@@ -18,8 +20,7 @@ class NewsConfigManager {
     
     var topicsPathDic = [Category: String]()
     
-    var categoryArticles: [Category : (date: String, articles :[Article])] = [:]
-    
+    var categoryArticles: [CountryCode: cArticles] = [:]
 }
 
 // MARK: - Get API Type URL

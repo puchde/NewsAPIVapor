@@ -35,11 +35,11 @@ struct GoogleNewsController: RouteCollection {
             }
             
             // MARK: - 時間內返回預存資料
-            if let defualtArticlesTuple = newsManager.categoryArticles[category],
+            if let defualtArticlesTuple = newsManager.categoryArticles[country]?[category],
                let defualtDate = formatter.date(from: defualtArticlesTuple.date),
                Date.now < defualtDate.addingTimeInterval(600) {
                 let articles = defualtArticlesTuple.articles
-                var apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
+                let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
                 
                 return apiResponse
             }
@@ -95,10 +95,13 @@ struct GoogleNewsController: RouteCollection {
         if type == .topics,
             let categoryStr = queryParameters.category,
             let category = Category(rawValue: categoryStr) {
-            newsManager.categoryArticles[category] = (date: formatter.string(from: Date.now), articles: articles)
+            if newsManager.categoryArticles[country] == nil {
+                newsManager.categoryArticles[country] = [:]
+            }
+            newsManager.categoryArticles[country]?[category] = (date: formatter.string(from: Date.now), articles: articles)
         }
         
-        var apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
+        let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
         
         return apiResponse
     }
