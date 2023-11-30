@@ -25,6 +25,7 @@ struct GoogleNewsController: RouteCollection {
         
         // MARK: - Get Data URL And Check Defualt Articles Data
         var url = ""
+        var cacheKey = "\(type)+\(country)"
         let formatter = DateFormatter()
         formatter.dateFormat = "yyMMddHHmmss"
         
@@ -34,15 +35,7 @@ struct GoogleNewsController: RouteCollection {
                 return NewsAPIResponse(status: "N", totalResults: 0, articles: [])
             }
             
-            // MARK: - 時間內返回預存資料
-            if let defualtArticlesTuple = newsManager.categoryArticles[country]?[category],
-               let defualtDate = formatter.date(from: defualtArticlesTuple.date),
-               Date.now < defualtDate.addingTimeInterval(15 * 60) {
-                let articles = defualtArticlesTuple.articles
-                let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
-                
-                return apiResponse
-            }
+            cacheKey += "+\(categoryStr)"
             
             // MARK: - 取得Topics網址path
             if newsManager.topicsPathDic[category] == nil {
@@ -52,9 +45,18 @@ struct GoogleNewsController: RouteCollection {
             url = newsManager.getUrl(type: type, country: country, category: category)
         case .search:
             let queryString = queryParameters.q
+            cacheKey += "+\(String(describing: queryString))"
             url = newsManager.getUrl(type: type, country: country, q: queryString)
         default:
             return NewsAPIResponse(status: "N", totalResults: 0, articles: [])
+        }
+        
+        
+        // MARK: - 時間內返回Cache預存資料
+        if let cacheArticles = try await appCache.get(cacheKey, as: NewsAPIResponse.self) {
+            print("cache item memory: \(MemoryLayout.size(ofValue: cacheArticles))")
+            print("cache return")
+            return cacheArticles
         }
         
         
@@ -91,18 +93,11 @@ struct GoogleNewsController: RouteCollection {
             articles.append(article)
         }
         
-        // MARK: - Topics 回存預設資料
-        if type == .topics,
-            let categoryStr = queryParameters.category,
-            let category = Category(rawValue: categoryStr) {
-            if newsManager.categoryArticles[country] == nil {
-                newsManager.categoryArticles[country] = [:]
-            }
-            newsManager.categoryArticles[country]?[category] = (date: formatter.string(from: Date.now), articles: articles)
-        }
-        
         let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
         
+        // MARK: - 回存Cache資料
+        try await appCache.set(cacheKey, to: apiResponse, expiresIn: .minutes(20))
+        print("item memory: \(MemoryLayout.size(ofValue: apiResponse))")
         return apiResponse
     }
     

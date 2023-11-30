@@ -2,6 +2,9 @@ import Vapor
 import Dispatch
 import Logging
 
+var app: Application!
+var appCache = app.cache
+
 var newsManager = NewsConfigManager.shared
 
 /// This extension is temporary and can be removed once Vapor gets this support.
@@ -28,10 +31,11 @@ enum Entrypoint {
         var env = try Environment.detect()
         try LoggingSystem.bootstrap(from: &env)
         
-        let app = Application(env)
+        app = Application(env)
         defer { app.shutdown() }
         
         do {
+            app.caches.use(.memory)
             try await configure(app)
         } catch {
             app.logger.report(error: error)
