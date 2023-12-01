@@ -27,7 +27,7 @@ extension NewsConfigManager {
         case .search:
             /// https://news.google.com/search?q=taiwan&hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant
             ///
-            guard let q = q else {
+            guard let q = q?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 return "error"
             }
             
