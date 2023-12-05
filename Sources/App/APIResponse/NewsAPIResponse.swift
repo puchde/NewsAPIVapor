@@ -34,3 +34,10 @@ struct Source: Content {
     let id: String?
     let name: String
 }
+
+
+struct NewsAPIProtobufResponse: Content {
+    let status: String
+    let totalResults: Int
+    let articles: Data
+}

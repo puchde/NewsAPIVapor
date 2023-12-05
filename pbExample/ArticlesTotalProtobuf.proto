@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+message ArticlesTotalProtobuf {
+  int32 totalResults = 1;
+  repeated ArticleProtobuf articles = 2;
+}
+
+message ArticleProtobuf {
+  string url = 1;
+    SourceProtobuf source = 2;
+  string author = 3;
+  string title = 4;
+  string description = 5;
+  string urlToImage = 6;
+  string publishedAt = 7;
+  string content = 8;
+}
+
+message SourceProtobuf {
+  string id = 1;
+  string name = 2;
+}

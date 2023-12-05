@@ -7,11 +7,13 @@
 
 import Vapor
 import SwiftSoup
+import SwiftProtobuf
 
 struct GoogleNewsController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
         newsRoute.get(use: scrapeGoogleNews)
+        newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
     }
 
     func scrapeGoogleNews(req: Request) async throws -> NewsAPIResponse {
@@ -88,7 +90,7 @@ struct GoogleNewsController: RouteCollection {
             }
             let imageUrl = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
             
-            let article = Article(source: source, author: author, title: title, description: nil, url: url, urlToImage: imageUrl, publishedAt: publishedAt, content: nil)
+            let article = Article(source: source, author: author, title: title, description: "", url: url, urlToImage: imageUrl, publishedAt: publishedAt, content: "")
             
             articles.append(article)
         }
@@ -101,6 +103,110 @@ struct GoogleNewsController: RouteCollection {
         return apiResponse
     }
     
+    func scrapeGoogleNewsProtobuf(req: Request) async throws -> NewsAPIProtobufResponse {
+        
+        let queryParameters = try req.query.decode(NewsQueryParameters.self)
+        
+        guard let type = urlType(rawValue: queryParameters.type),
+              let country = CountryCode(rawValue: queryParameters.country) else {
+            return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
+        }
+        
+        // MARK: - Get Data URL And Check Defualt Articles Data
+        var url = ""
+        var cacheKey = "Protobuf+\(type)+\(country)"
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyMMddHHmmss"
+        
+        switch type {
+        case .topics:
+            guard let categoryStr = queryParameters.category, let category = Category(rawValue: categoryStr) else {
+                return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
+            }
+            
+            cacheKey += "+\(categoryStr)"
+            
+            // MARK: - 取得Topics網址path
+            if newsManager.topicsPathDic[category] == nil {
+                _ = try await updateNewsCategory(req: req)
+            }
+            
+            url = newsManager.getUrl(type: type, country: country, category: category)
+        case .search:
+            let queryString = queryParameters.q
+            cacheKey += "+\(String(describing: queryString))"
+            url = newsManager.getUrl(type: type, country: country, q: queryString)
+        default:
+            return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
+        }
+        
+        
+        // MARK: - 時間內返回Cache預存資料
+        if let cacheArticles = try await appCache.get(cacheKey, as: NewsAPIProtobufResponse.self) {
+            print("cache item memory: \(MemoryLayout.size(ofValue: cacheArticles))")
+            print("cache return")
+            return cacheArticles
+        }
+        
+        
+        /// Prepare Data
+        var articleProtobufs: [ArticleProtobuf] = []
+        
+        // 使用 Vapor 的 client 發送 HTTP 請求
+        let result = try await req.client.get(URI(string: url))
+
+        guard result.status == .ok else {
+            throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
+        }
+        
+        guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
+            throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
+        }
+
+        // 使用 SwiftSoup 解析 HTML
+        let document = try SwiftSoup.parse(html)
+        
+        _ = try document.getElementsByTag("article").map { e in
+            let title = try e.text()
+            let publishedAt = try e.getElementsByTag("time").first()?.text() ?? ""
+            let source = Source(id: "", name: try e.getElementsByAttribute("data-n-tid").first()?.text() ?? "")
+            let author = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
+            var url = try e.getElementsByAttribute("target").first()?.getAttributes()?.get(key: "href") ?? ""
+            if !url.contains("http") && url.contains("./") {
+                url.replace("./", with: e.getBaseUri())
+            }
+            let imageUrl = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
+            
+            //
+            let sourceProtobuf = try SourceProtobuf.with {
+                $0.id = ""
+                $0.name = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
+            }
+            
+            let articleProtobuf = ArticleProtobuf.with {
+                $0.source = sourceProtobuf
+                $0.author = author
+                $0.title = title
+                $0.url = url
+                $0.urlToImage = imageUrl ?? ""
+                $0.publishedAt = publishedAt
+            }
+            articleProtobufs.append(articleProtobuf)
+        }
+        
+        let articlesTotalProtobuf = ArticlesTotalProtobuf.with {
+            $0.articles = articleProtobufs
+            $0.totalResults = Int32(articleProtobufs.count)
+        }
+        let articlesData = try articlesTotalProtobuf.serializedData()
+        let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
+        
+        // MARK: - 回存Cache資料
+        try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
+        print("item memory: \(MemoryLayout.size(ofValue: apiProtobufResponse))")
+        return apiProtobufResponse
+    }
+
     
     // MARK: - 取得Topics網址path
     func updateNewsCategory(req: Request) async throws -> ClientResponse {
