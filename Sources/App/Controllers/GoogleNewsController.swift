@@ -109,6 +109,7 @@ struct GoogleNewsController: RouteCollection {
         
         guard let type = urlType(rawValue: queryParameters.type),
               let country = CountryCode(rawValue: queryParameters.country) else {
+            app.logger.info("Type Error: \(String(describing: queryParameters.type)),\n Country Error: \(String(describing: queryParameters.country))")
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
         }
         
@@ -121,6 +122,7 @@ struct GoogleNewsController: RouteCollection {
         switch type {
         case .topics:
             guard let categoryStr = queryParameters.category, let category = Category(rawValue: categoryStr) else {
+                app.logger.info("Category Error: \(queryParameters.category ?? "Not Para")")
                 return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
             }
             
@@ -209,45 +211,52 @@ struct GoogleNewsController: RouteCollection {
 
     
     // MARK: - 取得Topics網址path
-    func updateNewsCategory(req: Request) async throws -> ClientResponse {
-        let url = "\(newsManager.homeUrl)?\(CountryCode.TW.getPath())"
-        let result = try await req.client.get(URI(string: url))
-        guard result.status == .ok else {
-            throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
-        }
+    func updateNewsCategory(req: Request) async throws -> Void {
+        for country in CountryCode.allCases {
+            let url = "\(newsManager.homeUrl)?\(country.getPath())"
+            let result = try await req.client.get(URI(string: url))
+            guard result.status == .ok else {
+                throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
+            }
 
-        // 解析 HTML 內容
-        guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
-            throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
-        }
-        
-        var categoryPathArr = [(category: String, path: String)]()
-        
-        // 使用 SwiftSoup 解析 HTML
-        let document = try SwiftSoup.parse(html)
-        
-        _ = try document.getElementsByAttributeValueContaining("role", "menuitem").map { e in
-            let role = try e.attr("role")
-            guard e.tag().getName() == "a",
-                  try e.attr("href").contains("topics") else {
-                return
+            // 解析 HTML 內容
+            guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
+                throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
             }
             
-            let path = try e.attr("href").replacing("./topics", with: "").split(separator: "?").first
+            var categoryPathArr = [(category: String, path: String)]()
+            
+            // 使用 SwiftSoup 解析 HTML
+            let document = try SwiftSoup.parse(html)
+            
+            _ = try document.getElementsByAttributeValueContaining("role", "menuitem").map { e in
+                let role = try e.attr("role")
+                guard e.tag().getName() == "a",
+                      try e.attr("href").contains("topics") else {
+                    return
+                }
+                
+                let path = try e.attr("href").replacing("./topics", with: "").split(separator: "?").first
 
-            categoryPathArr.append((try e.text(), String(path ?? "path Error")))
+                categoryPathArr.append((try e.text(), String(path ?? "path Error")))
+            }
+            
+            // MARK: - 移除兩項(國際, 當地)分類
+            categoryPathArr.remove(at: 1)
+            categoryPathArr.remove(at: 1)
+            
+            if country == .TW {
+                for i in 0 ..< categoryPathArr.count {
+                    let data = categoryPathArr[i]
+                    let category = Category.allCases[i]
+                    newsManager.topicsPathDic[category] = data.path
+                    
+                }
+            }
+            let data = categoryPathArr[0]
+            newsManager.topicsRegionPathDic[country] = data.path
         }
-        
-        // MARK: - 移除兩項(國際, 當地)分類
-        categoryPathArr.remove(at: 1)
-        categoryPathArr.remove(at: 1)
-        
-        for i in 0 ..< categoryPathArr.count {
-            let data = categoryPathArr[i]
-            let category = Category.allCases[i]
-            newsManager.topicsPathDic[category] = data.path
-        }
-        
-        return result
+        app.logger.info("Get General Path Finished")
+        return
     }
 }

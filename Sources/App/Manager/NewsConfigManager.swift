@@ -17,6 +17,7 @@ class NewsConfigManager {
     var homeUrl = "https://news.google.com/home"
     
     var topicsPathDic = [Category: String]()
+    var topicsRegionPathDic = [CountryCode: String]()
 }
 
 // MARK: - Get API Type URL
@@ -35,10 +36,10 @@ extension NewsConfigManager {
         case .topics:
             /// "https://news.google.com/topics/CAAqLAgKIiZDQkFTRmdvSkwyMHZNR1ptZHpWbUVnVjZhQzFVVnhvQ1ZGY29BQVAB?hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant"
             ///
-            guard let category = category, let path = topicsPathDic[category] else {
+            guard let category = category, let topicsPath = topicsPathDic[category], let regionPath = topicsRegionPathDic[country] else {
                 return "error"
             }
-            
+            var path = category == .general ? regionPath : topicsPath
             url = "\(baseUrl)\(type.getPrefixPath())\(String(describing: path))?\(country.getPath())"
         case .article:
             break
