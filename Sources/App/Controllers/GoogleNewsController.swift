@@ -80,7 +80,7 @@ struct GoogleNewsController: RouteCollection {
         let document = try SwiftSoup.parse(html)
         
         _ = try document.getElementsByTag("article").map { e in
-            let title = try e.text()
+            var title = try e.getElementsByTag("a").filter{a in try !a.text().isEmpty}.first?.text() ?? ""
             let publishedAt = try e.getElementsByTag("time").first()?.text() ?? ""
             let source = Source(id: "", name: try e.getElementsByAttribute("data-n-tid").first()?.text() ?? "")
             let author = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
@@ -169,7 +169,7 @@ struct GoogleNewsController: RouteCollection {
         let document = try SwiftSoup.parse(html)
         
         _ = try document.getElementsByTag("article").map { e in
-            let title = try e.text()
+            var title = try e.getElementsByTag("a").filter{a in try !a.text().isEmpty}.first?.text() ?? ""
             let publishedAt = try e.getElementsByTag("time").first()?.text() ?? ""
             let source = Source(id: "", name: try e.getElementsByAttribute("data-n-tid").first()?.text() ?? "")
             let author = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
