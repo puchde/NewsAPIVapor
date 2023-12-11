@@ -31,6 +31,7 @@ enum Category: String, CaseIterable, Codable {
     case entertainment
     case sports
     case health
+    case science
     
     var chineseName: String {
         switch self {
@@ -46,6 +47,8 @@ enum Category: String, CaseIterable, Codable {
             return "體育"
         case .technology:
             return "科技"
+        case .science:
+            return "科學"
         }
     }
     
@@ -63,6 +66,8 @@ enum Category: String, CaseIterable, Codable {
             return 5
         case .entertainment:
             return 6
+        case .science:
+            return 7
         }
     }
     
@@ -72,6 +77,15 @@ enum Category: String, CaseIterable, Codable {
     
     static func fromOrder(_ order: Int) -> Category? {
         return Category.allCases.first(where: { $0.order == order })
+    }
+    
+    func getTopicPath() -> String {
+        switch self {
+        case .science:
+            return "/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp0Y1RjU0JYcG9MVlJYR2dKVVZ5Z0FQAQ"
+        default:
+            return ""
+        }
     }
 }
 

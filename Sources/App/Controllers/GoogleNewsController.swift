@@ -250,8 +250,10 @@ struct GoogleNewsController: RouteCollection {
                     let data = categoryPathArr[i]
                     let category = Category.allCases[i]
                     newsManager.topicsPathDic[category] = data.path
-                    
                 }
+                
+                // 固定Path
+                newsManager.topicsPathDic[Category.science] = Category.science.getTopicPath()
             }
             let data = categoryPathArr[0]
             newsManager.topicsRegionPathDic[country] = data.path
