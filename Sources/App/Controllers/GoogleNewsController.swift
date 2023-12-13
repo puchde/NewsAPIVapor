@@ -12,7 +12,7 @@ import SwiftProtobuf
 struct GoogleNewsController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
-        newsRoute.get(use: scrapeGoogleNews)
+        newsRoute.post(use: scrapeGoogleNews)
         newsRoute.get("update", use: updateCategoryArticles)
         newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
     }
@@ -48,8 +48,9 @@ struct GoogleNewsController: RouteCollection {
             url = newsManager.getUrl(type: type, country: country, category: category)
         case .search:
             let queryString = queryParameters.q
-            cacheKey += "+\(String(describing: queryString))"
-            url = newsManager.getUrl(type: type, country: country, q: queryString)
+            let searchTime = queryParameters.searchTime ?? ""
+            cacheKey += "+\(String(describing: queryString))+\(searchTime)"
+            url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime)
         default:
             return NewsAPIResponse(status: "N", totalResults: 0, articles: [])
         }
@@ -137,8 +138,9 @@ struct GoogleNewsController: RouteCollection {
             url = newsManager.getUrl(type: type, country: country, category: category)
         case .search:
             let queryString = queryParameters.q
-            cacheKey += "+\(String(describing: queryString))"
-            url = newsManager.getUrl(type: type, country: country, q: queryString)
+            let searchTime = queryParameters.searchTime ?? ""
+            cacheKey += "+\(String(describing: queryString))+\(searchTime)"
+            url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime)
         default:
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
         }

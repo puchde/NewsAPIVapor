@@ -13,6 +13,7 @@ struct NewsQueryParameters: Content {
     var country: String  // Assuming CountryCode is a String
     var category: String?  // Assuming Category is a String
     var q: String?
+    var searchTime: String?
 }
 
 struct NewsUpdateQueryParameters: Content {

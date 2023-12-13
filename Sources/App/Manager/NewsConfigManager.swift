@@ -22,13 +22,16 @@ class NewsConfigManager {
 
 // MARK: - Get API Type URL
 extension NewsConfigManager {
-    func getUrl(type: urlType, country: CountryCode, category: Category? = nil, q: String? = nil) -> String {
+    func getUrl(type: urlType, country: CountryCode, category: Category? = nil, q: String? = nil, qSearchTime: String? = nil) -> String {
         var url = ""
         switch type {
         case .search:
             /// https://news.google.com/search?q=taiwan&hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant
             ///
-            guard let q = q?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            var q = q ?? ""
+            let qSearchTime = qSearchTime ?? ""
+            q += " when:\(qSearchTime)"
+            guard let q = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 return "error"
             }
             
