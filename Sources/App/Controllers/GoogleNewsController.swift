@@ -99,7 +99,7 @@ struct GoogleNewsController: RouteCollection {
         let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
         
         // MARK: - 回存Cache資料
-        try await appCache.set(cacheKey, to: apiResponse, expiresIn: .minutes(20))
+        try await appCache.set(cacheKey, to: apiResponse, expiresIn: .minutes(22))
         print("item memory: \(MemoryLayout.size(ofValue: apiResponse))")
         return apiResponse
     }
@@ -154,7 +154,7 @@ struct GoogleNewsController: RouteCollection {
         let apiProtobufResponse = await getNewsData(req: req, url: url, cacheKey: cacheKey)
         
         // MARK: - 回存Cache資料
-        try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
+        try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(22))
         print("item memory: \(MemoryLayout.size(ofValue: apiProtobufResponse))")
         return apiProtobufResponse
     }
