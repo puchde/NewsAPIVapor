@@ -14,3 +14,7 @@ struct NewsQueryParameters: Content {
     var category: String?  // Assuming Category is a String
     var q: String?
 }
+
+struct NewsUpdateQueryParameters: Content {
+    var country: String  // Assuming CountryCode is a String
+}

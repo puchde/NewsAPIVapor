@@ -13,6 +13,7 @@ struct GoogleNewsController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
         newsRoute.get(use: scrapeGoogleNews)
+        newsRoute.get("update", use: updateCategoryArticles)
         newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
     }
 
@@ -150,66 +151,121 @@ struct GoogleNewsController: RouteCollection {
             return cacheArticles
         }
         
-        
-        /// Prepare Data
-        var articleProtobufs: [ArticleProtobuf] = []
-        
-        // 使用 Vapor 的 client 發送 HTTP 請求
-        let result = try await req.client.get(URI(string: url))
-
-        guard result.status == .ok else {
-            throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
-        }
-        
-        guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
-            throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
-        }
-
-        // 使用 SwiftSoup 解析 HTML
-        let document = try SwiftSoup.parse(html)
-        
-        _ = try document.getElementsByTag("article").map { e in
-            var title = try e.getElementsByTag("a").filter{a in try !a.text().isEmpty}.first?.text() ?? ""
-            let publishedAt = try e.getElementsByTag("time").first()?.text() ?? ""
-            let source = Source(id: "", name: try e.getElementsByAttribute("data-n-tid").first()?.text() ?? "")
-            let author = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
-            var url = try e.getElementsByAttribute("target").first()?.getAttributes()?.get(key: "href") ?? ""
-            if !url.contains("http") && url.contains("./") {
-                url.replace("./", with: e.getBaseUri())
-            }
-            let imageUrl = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
-            
-            //
-            let sourceProtobuf = try SourceProtobuf.with {
-                $0.id = ""
-                $0.name = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
-            }
-            
-            let articleProtobuf = ArticleProtobuf.with {
-                $0.source = sourceProtobuf
-                $0.author = author
-                $0.title = title
-                $0.url = url
-                $0.urlToImage = imageUrl ?? ""
-                $0.publishedAt = publishedAt
-            }
-            articleProtobufs.append(articleProtobuf)
-        }
-        
-        let articlesTotalProtobuf = ArticlesTotalProtobuf.with {
-            $0.articles = articleProtobufs
-            $0.totalResults = Int32(articleProtobufs.count)
-        }
-        let articlesData = try articlesTotalProtobuf.serializedData()
-        let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
+        let apiProtobufResponse = await getNewsData(req: req, url: url, cacheKey: cacheKey)
         
         // MARK: - 回存Cache資料
         try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
         print("item memory: \(MemoryLayout.size(ofValue: apiProtobufResponse))")
         return apiProtobufResponse
     }
+}
 
-    
+extension GoogleNewsController {
+    // MARK: - Update地區Topic
+    func updateCategoryArticles(req: Request) async throws -> Response {
+        let queryParameters = try req.query.decode(NewsUpdateQueryParameters.self)
+        
+        if let country = CountryCode(rawValue: queryParameters.country) {
+            for category in Category.allCases {
+                if newsManager.topicsPathDic[category] == nil {
+                    _ = try await updateNewsCategory(req: req)
+                }
+                let url = newsManager.getUrl(type: .topics, country: country, category: category)
+                print(url)
+                Task {
+                    let cacheKey = "Protobuf+\(urlType.topics)+\(country)+\(category)"
+                    print(cacheKey)
+                    _ = await getNewsData(req: req, url: url, cacheKey: cacheKey)
+                }
+            }
+        } else {
+            for country in CountryCode.allCases {
+                for category in Category.allCases {
+                    if newsManager.topicsPathDic[category] == nil {
+                        _ = try await updateNewsCategory(req: req)
+                    }
+                    let url = newsManager.getUrl(type: .topics, country: country, category: category)
+                    print(url)
+                    Task {
+                        let cacheKey = "Protobuf+\(urlType.topics)+\(country)+\(category)"
+                        print(cacheKey)
+                        _ = await getNewsData(req: req, url: url, cacheKey: cacheKey)
+                    }
+                }
+            }
+        }
+        return Response(body: "UPDATE")
+    }
+}
+
+extension GoogleNewsController {
+    // MARK: - 取得News (Category & Search)
+    func getNewsData(req: Request, url: String, cacheKey: String) async -> NewsAPIProtobufResponse {
+        do {
+            /// Prepare Data
+            var articleProtobufs: [ArticleProtobuf] = []
+            // 使用 Vapor 的 client 發送 HTTP 請求
+            let result = try await req.client.get(URI(string: url))
+            
+            guard result.status == .ok else {
+                throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
+            }
+            
+            guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
+                throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
+            }
+            
+            // 使用 SwiftSoup 解析 HTML
+            let document = try SwiftSoup.parse(html)
+            
+            _ = try document.getElementsByTag("article").map { e in
+                var title = try e.getElementsByTag("a").filter{a in try !a.text().isEmpty}.first?.text() ?? ""
+                let publishedAt = try e.getElementsByTag("time").first()?.text() ?? ""
+                let source = Source(id: "", name: try e.getElementsByAttribute("data-n-tid").first()?.text() ?? "")
+                let author = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
+                var url = try e.getElementsByAttribute("target").first()?.getAttributes()?.get(key: "href") ?? ""
+                if !url.contains("http") && url.contains("./") {
+                    url.replace("./", with: e.getBaseUri())
+                }
+                let imageUrl = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
+                
+                //
+                let sourceProtobuf = try SourceProtobuf.with {
+                    $0.id = ""
+                    $0.name = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
+                }
+                
+                let articleProtobuf = ArticleProtobuf.with {
+                    $0.source = sourceProtobuf
+                    $0.author = author
+                    $0.title = title
+                    $0.url = url
+                    $0.urlToImage = imageUrl ?? ""
+                    $0.publishedAt = publishedAt
+                }
+                articleProtobufs.append(articleProtobuf)
+            }
+            
+            let articlesTotalProtobuf = ArticlesTotalProtobuf.with {
+                $0.articles = articleProtobufs
+                $0.totalResults = Int32(articleProtobufs.count)
+            }
+            let articlesData = try articlesTotalProtobuf.serializedData()
+
+            
+            let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
+            try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
+            print("cacheOK: \(cacheKey)")
+            return apiProtobufResponse
+        } catch {
+            print(error)
+            return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
+        }
+    }
+
+}
+
+extension GoogleNewsController {
     // MARK: - 取得Topics網址path
     func updateNewsCategory(req: Request) async throws -> Void {
         for country in CountryCode.allCases {
