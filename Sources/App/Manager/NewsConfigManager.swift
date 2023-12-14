@@ -30,7 +30,9 @@ extension NewsConfigManager {
             ///
             var q = q ?? ""
             let qSearchTime = qSearchTime ?? ""
-            q += " when:\(qSearchTime)"
+            if !qSearchTime.isEmpty {
+                q += " when:\(qSearchTime)"                
+            }
             guard let q = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 return "error"
             }
