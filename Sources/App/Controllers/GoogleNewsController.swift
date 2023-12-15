@@ -336,8 +336,6 @@ extension GoogleNewsController {
     }
 }
 
-}
-
 extension GoogleNewsController {
     // MARK: - 取得Topics網址path
     func updateNewsCategory(req: Request) async throws -> Void {
