@@ -13,8 +13,8 @@ struct GoogleNewsController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
         newsRoute.post(use: scrapeGoogleNews)
-        newsRoute.get("update", use: updateCategoryArticles)
         newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
+        newsRoute.get("update", use: updateCategoryArticles)
     }
 
     func scrapeGoogleNews(req: Request) async throws -> NewsAPIResponse {
@@ -140,7 +140,7 @@ struct GoogleNewsController: RouteCollection {
             let queryString = queryParameters.q
             let searchTime = queryParameters.searchTime ?? ""
             cacheKey += "+\(String(describing: queryString))+\(searchTime)"
-            url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime)
+            url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime, isRss: true)
         default:
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
         }
@@ -153,7 +153,16 @@ struct GoogleNewsController: RouteCollection {
             return cacheArticles
         }
         
-        let apiProtobufResponse = await getNewsData(req: req, url: url, cacheKey: cacheKey)
+        let apiProtobufResponse = await {
+            switch type {
+            case .search:
+                return await getNewsDataRss(req: req, url: url, cacheKey: cacheKey)
+            case .topics:
+                return await getNewsData(req: req, url: url, cacheKey: cacheKey)
+            default:
+                return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
+            }
+        }()
         
         // MARK: - 回存Cache資料
         try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(22))
@@ -264,6 +273,68 @@ extension GoogleNewsController {
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
         }
     }
+    
+    func getNewsDataRss(req: Request, url: String, cacheKey: String) async -> NewsAPIProtobufResponse {
+        do {
+            /// Prepare Data
+            var articleProtobufs: [ArticleProtobuf] = []
+            // 使用 Vapor 的 client 發送 HTTP 請求
+            let result = try await req.client.get(URI(string: url))
+            
+            guard result.status == .ok else {
+                throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
+            }
+            
+            guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
+                throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
+            }
+            
+            // 使用 SwiftSoup 解析 HTML
+            let document = try SwiftSoup.parse(html, html, Parser.xmlParser())
+            _ = try document.select("item").map({ e in
+                var titleO = try e.getElementsByTag("title").text().split(separator: " - ")
+                titleO.remove(at: titleO.count - 1)
+                var title = ""
+                for t in titleO {
+                    title += t
+                }
+                var url = try e.getElementsByTag("link").text()
+                
+                var publishedAt = String(try e.getElementsByTag("pubdate").text().split(separator: " GMT").first ?? "")
+                let author = try e.getElementsByTag("source").text()
+                                
+                let sourceProtobuf = try SourceProtobuf.with {
+                    $0.id = ""
+                    $0.name = try e.getElementsByTag("source").text()
+                }
+                
+                let articleProtobuf = ArticleProtobuf.with {
+                    $0.source = sourceProtobuf
+                    $0.author = author
+                    $0.title = title
+                    $0.url = url
+                    $0.urlToImage = ""
+                    $0.publishedAt = publishedAt
+                }
+                articleProtobufs.append(articleProtobuf)
+            })
+            
+            let articlesTotalProtobuf = ArticlesTotalProtobuf.with {
+                $0.articles = articleProtobufs
+                $0.totalResults = Int32(articleProtobufs.count)
+            }
+            let articlesData = try articlesTotalProtobuf.serializedData()
+            
+            let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
+            try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
+            print("cacheOK: \(cacheKey)")
+            return apiProtobufResponse
+        } catch {
+            print(error)
+            return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
+        }
+    }
+}
 
 }
 

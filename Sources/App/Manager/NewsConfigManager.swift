@@ -14,6 +14,7 @@ class NewsConfigManager {
     private init() { }
     
     var baseUrl = "https://news.google.com"
+    var baseRssUrl = "https://news.google.com/rss"
     var homeUrl = "https://news.google.com/home"
     
     var topicsPathDic = [Category: String]()
@@ -22,8 +23,9 @@ class NewsConfigManager {
 
 // MARK: - Get API Type URL
 extension NewsConfigManager {
-    func getUrl(type: urlType, country: CountryCode, category: Category? = nil, q: String? = nil, qSearchTime: String? = nil) -> String {
+    func getUrl(type: urlType, country: CountryCode, category: Category? = nil, q: String? = nil, qSearchTime: String? = nil, isRss: Bool = false) -> String {
         var url = ""
+        let baseUrl = isRss ? baseRssUrl : baseUrl
         switch type {
         case .search:
             /// https://news.google.com/search?q=taiwan&hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant
@@ -44,7 +46,7 @@ extension NewsConfigManager {
             guard let category = category, let topicsPath = topicsPathDic[category], let regionPath = topicsRegionPathDic[country] else {
                 return "error"
             }
-            var path = category == .general ? regionPath : topicsPath
+            let path = category == .general ? regionPath : topicsPath
             url = "\(baseUrl)\(type.getPrefixPath())\(String(describing: path))?\(country.getPath())"
         case .article:
             break
