@@ -31,7 +31,10 @@ struct GoogleNewsController: RouteCollection {
         newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
         newsRoute.get("update", use: updateCategoryArticles)
     }
+}
 
+extension GoogleNewsController {
+    // MARK: - base
     func scrapeGoogleNews(req: Request) async throws -> NewsAPIResponse {
         
         let queryParameters = try req.query.decode(NewsQueryParameters.self)
@@ -120,6 +123,7 @@ struct GoogleNewsController: RouteCollection {
         return apiResponse
     }
     
+    // MARK: - base/protobuf
     func scrapeGoogleNewsProtobuf(req: Request) async throws -> NewsAPIProtobufResponse {
         
         let queryParameters = try req.query.decode(NewsQueryParameters.self)
@@ -188,10 +192,8 @@ struct GoogleNewsController: RouteCollection {
         print("item memory: \(MemoryLayout.size(ofValue: apiProtobufResponse))")
         return apiProtobufResponse
     }
-}
-
-extension GoogleNewsController {
-    // MARK: - Update地區Topic
+    
+    // MARK: - base/Update - 更新地區Topic
     func updateCategoryArticles(req: Request) async throws -> Response {
         let queryParameters = try req.query.decode(NewsUpdateQueryParameters.self)
         
@@ -228,8 +230,8 @@ extension GoogleNewsController {
     }
 }
 
+// MARK: - 取得News (Category & Search)
 extension GoogleNewsController {
-    // MARK: - 取得News (Category & Search)
     func getNewsData(req: Request, url: String, cacheKey: String) async -> NewsAPIProtobufResponse {
         do {
             /// Prepare Data
@@ -358,8 +360,8 @@ extension GoogleNewsController {
     }
 }
 
+// MARK: - Search Sort
 extension GoogleNewsController {
-    // MARK: - Search Sort
     func sortNews(response: NewsAPIProtobufResponse, searchSort: SearchSortBy) -> NewsAPIProtobufResponse {
         do {
             switch searchSort {
@@ -384,8 +386,8 @@ extension GoogleNewsController {
     }
 }
 
+// MARK: - 首次取得Topics網址path
 extension GoogleNewsController {
-    // MARK: - 取得Topics網址path
     func updateNewsCategory(req: Request) async throws -> Void {
         for country in CountryCode.allCases {
             let url = "\(newsManager.homeUrl)?\(country.getPath())"
