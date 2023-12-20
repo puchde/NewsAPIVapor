@@ -10,6 +10,21 @@ import SwiftSoup
 import SwiftProtobuf
 
 struct GoogleNewsController: RouteCollection {
+    var rssDateFormatter: DateFormatter {
+        let rssDateFormatter = DateFormatter()
+        rssDateFormatter.dateFormat = "EEE',' dd MMM yyyy HH:mm:ss' GMT'"
+        rssDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        rssDateFormatter.timeZone = .gmt
+        return rssDateFormatter
+    }
+    
+    var transformDateFormatter: DateFormatter {
+        let transformDateFormatter = DateFormatter()
+        transformDateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        // TODO: 時區固定待APP端同時實作
+        return transformDateFormatter
+    }
+    
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
         newsRoute.post(use: scrapeGoogleNews)
@@ -120,6 +135,9 @@ struct GoogleNewsController: RouteCollection {
         var cacheKey = "Protobuf+\(type)+\(country)"
         let formatter = DateFormatter()
         formatter.dateFormat = "yyMMddHHmmss"
+
+        // For Search
+        let searchSort = SearchSortBy(rawValue: queryParameters.searchSort ?? "") ?? SearchSortBy.none
         
         switch type {
         case .topics:
@@ -139,7 +157,7 @@ struct GoogleNewsController: RouteCollection {
         case .search:
             let queryString = queryParameters.q
             let searchTime = queryParameters.searchTime ?? ""
-            cacheKey += "+\(String(describing: queryString))+\(searchTime)"
+            cacheKey += "+\(String(describing: queryString))+\(searchTime)+\(searchSort)"
             url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime, isRss: true)
         default:
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
@@ -156,7 +174,8 @@ struct GoogleNewsController: RouteCollection {
         let apiProtobufResponse = await {
             switch type {
             case .search:
-                return await getNewsDataRss(req: req, url: url, cacheKey: cacheKey)
+                let data = await getNewsDataRss(req: req, url: url, cacheKey: cacheKey)
+                return sortNews(response: data, searchSort: searchSort)
             case .topics:
                 return await getNewsData(req: req, url: url, cacheKey: cacheKey)
             default:
@@ -298,9 +317,12 @@ extension GoogleNewsController {
                 for t in titleO {
                     title += t
                 }
-                var url = try e.getElementsByTag("link").text()
+                let url = try e.getElementsByTag("link").text()
                 
-                var publishedAt = String(try e.getElementsByTag("pubdate").text().split(separator: " GMT").first ?? "")
+                let publishedStr = String(try e.getElementsByTag("pubdate").text())
+                let publishDate = rssDateFormatter.date(from: String(publishedStr))
+                let publishedAt = transformDateFormatter.string(from: publishDate ?? Date())
+                
                 let author = try e.getElementsByTag("source").text()
                                 
                 let sourceProtobuf = try SourceProtobuf.with {
@@ -333,6 +355,32 @@ extension GoogleNewsController {
             print(error)
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
         }
+    }
+}
+
+extension GoogleNewsController {
+    // MARK: - Search Sort
+    func sortNews(response: NewsAPIProtobufResponse, searchSort: SearchSortBy) -> NewsAPIProtobufResponse {
+        do {
+            switch searchSort {
+            case .relevancy:
+                break
+            case .popularity:
+                break
+            case .publishedAt:
+                var articlesTotals = try ArticlesTotalProtobuf(serializedData: response.articles)
+                articlesTotals.articles.sort { a, b in
+                    return transformDateFormatter.date(from: a.publishedAt) ?? .now > transformDateFormatter.date(from: b.publishedAt) ?? .now
+                }
+                let articles = try articlesTotals.serializedData()
+                return NewsAPIProtobufResponse(status: response.status, totalResults: response.totalResults, articles: articles)
+            case .none:
+                break
+            }
+        } catch {
+            print(error)
+        }
+        return response
     }
 }
 

@@ -181,17 +181,7 @@ enum SearchSortBy: String, Codable {
     case relevancy
     case popularity
     case publishedAt
-    
-    var chineseName: String {
-        switch self {
-        case .relevancy:
-            return "相關度"
-        case .popularity:
-            return "熱門排序"
-        case .publishedAt:
-            return "最新排序"
-        }
-    }
+    case none = ""
 }
 
 enum DisplayMode: String {
