@@ -14,7 +14,7 @@ struct GoogleNewsController: RouteCollection {
         let rssDateFormatter = DateFormatter()
         rssDateFormatter.dateFormat = "EEE',' dd MMM yyyy HH:mm:ss' GMT'"
         rssDateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        rssDateFormatter.timeZone = .gmt
+        rssDateFormatter.timeZone = TimeZone(identifier: "GMT")
         return rssDateFormatter
     }
     
