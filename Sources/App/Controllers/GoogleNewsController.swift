@@ -159,9 +159,9 @@ extension GoogleNewsController {
             
             url = newsManager.getUrl(type: type, country: country, category: category)
         case .search:
-            let queryString = queryParameters.q
+            let queryString = queryParameters.q ?? ""
             let searchTime = queryParameters.searchTime ?? ""
-            cacheKey += "+\(String(describing: queryString))+\(searchTime)+\(searchSort)"
+            cacheKey += "+\(String(describing: queryString))+\(searchTime)"
             url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime, isRss: true)
         default:
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
@@ -170,9 +170,12 @@ extension GoogleNewsController {
         
         // MARK: - 時間內返回Cache預存資料
         if let cacheArticles = try await appCache.get(cacheKey, as: NewsAPIProtobufResponse.self) {
-            print("cache item memory: \(MemoryLayout.size(ofValue: cacheArticles))")
-            print("cache return")
-            return cacheArticles
+            app.logger.info("cache return, cache Key: \(cacheKey)")
+            if type == .search {
+                return sortNews(response: cacheArticles, searchSort: searchSort)
+            } else {
+                return cacheArticles
+            }
         }
         
         let apiProtobufResponse = await {
