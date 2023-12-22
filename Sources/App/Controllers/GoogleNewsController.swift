@@ -117,8 +117,6 @@ extension GoogleNewsController {
         
         let apiResponse = NewsAPIResponse(status: "OK", totalResults: articles.count, articles: articles)
         
-        // MARK: - 回存Cache資料
-        try await appCache.set(cacheKey, to: apiResponse, expiresIn: .minutes(22))
         print("item memory: \(MemoryLayout.size(ofValue: apiResponse))")
         return apiResponse
     }
@@ -130,7 +128,7 @@ extension GoogleNewsController {
         
         guard let type = urlType(rawValue: queryParameters.type),
               let country = CountryCode(rawValue: queryParameters.country) else {
-            app.logger.info("Type Error: \(String(describing: queryParameters.type)),\n Country Error: \(String(describing: queryParameters.country))")
+            print("Type Error: \(String(describing: queryParameters.type)),\n Country Error: \(String(describing: queryParameters.country))")
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
         }
         
@@ -146,7 +144,7 @@ extension GoogleNewsController {
         switch type {
         case .topics:
             guard let categoryStr = queryParameters.category, let category = Category(rawValue: categoryStr) else {
-                app.logger.info("Category Error: \(queryParameters.category ?? "Not Para")")
+                print("Category Error: \(queryParameters.category ?? "Not Para")")
                 return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
             }
             
@@ -170,7 +168,7 @@ extension GoogleNewsController {
         
         // MARK: - 時間內返回Cache預存資料
         if let cacheArticles = try await appCache.get(cacheKey, as: NewsAPIProtobufResponse.self) {
-            app.logger.info("cache return, cache Key: \(cacheKey)")
+            print("cache return, cache Key: \(cacheKey)")
             if type == .search {
                 return sortNews(response: cacheArticles, searchSort: searchSort)
             } else {
@@ -190,9 +188,7 @@ extension GoogleNewsController {
             }
         }()
         
-        // MARK: - 回存Cache資料
-        try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(22))
-        print("item memory: \(MemoryLayout.size(ofValue: apiProtobufResponse))")
+        print("scrape return")
         return apiProtobufResponse
     }
     
@@ -209,7 +205,7 @@ extension GoogleNewsController {
                 print(url)
                 Task {
                     let cacheKey = "Protobuf+\(urlType.topics)+\(country)+\(category)"
-                    print(cacheKey)
+                    print("update: \(cacheKey)")
                     _ = await getNewsData(req: req, url: url, cacheKey: cacheKey)
                 }
             }
@@ -223,7 +219,7 @@ extension GoogleNewsController {
                     print(url)
                     Task {
                         let cacheKey = "Protobuf+\(urlType.topics)+\(country)+\(category)"
-                        print(cacheKey)
+                        print("update: \(cacheKey)")
                         _ = await getNewsData(req: req, url: url, cacheKey: cacheKey)
                     }
                 }
@@ -289,7 +285,7 @@ extension GoogleNewsController {
 
             
             let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
-            try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
+            try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .seconds(1190))
             print("cacheOK: \(cacheKey)")
             return apiProtobufResponse
         } catch {
@@ -353,7 +349,7 @@ extension GoogleNewsController {
             let articlesData = try articlesTotalProtobuf.serializedData()
             
             let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
-            try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .minutes(20))
+            try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .seconds(1190))
             print("cacheOK: \(cacheKey)")
             return apiProtobufResponse
         } catch {
@@ -438,7 +434,7 @@ extension GoogleNewsController {
             let data = categoryPathArr[0]
             newsManager.topicsRegionPathDic[country] = data.path
         }
-        app.logger.info("Get General Path Finished")
+        print("Get General Path Finished")
         return
     }
 }
