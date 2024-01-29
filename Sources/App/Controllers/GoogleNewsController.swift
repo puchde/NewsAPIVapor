@@ -108,8 +108,9 @@ extension GoogleNewsController {
             if !url.contains("http") && url.contains("./") {
                 url.replace("./", with: e.getBaseUri())
             }
-            let imageUrl = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
-            
+            let imagePath = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
+            let imageUrl = newsManager.baseUrl + (imagePath ?? "")
+
             let article = Article(source: source, author: author, title: title, description: "", url: url, urlToImage: imageUrl, publishedAt: publishedAt, content: "")
             
             articles.append(article)
@@ -258,8 +259,8 @@ extension GoogleNewsController {
                 if !url.contains("http") && url.contains("./") {
                     url.replace("./", with: e.getBaseUri())
                 }
-                let imageUrl = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
-                
+                let imagePath = try e.getElementsByClass("Quavad").first()?.getAttributes()?.get(key: "src")
+                let imageUrl = newsManager.baseUrl + (imagePath ?? "")
                 //
                 let sourceProtobuf = try SourceProtobuf.with {
                     $0.id = ""
@@ -271,7 +272,7 @@ extension GoogleNewsController {
                     $0.author = author
                     $0.title = title
                     $0.url = url
-                    $0.urlToImage = imageUrl ?? ""
+                    $0.urlToImage = imageUrl
                     $0.publishedAt = publishedAt
                 }
                 articleProtobufs.append(articleProtobuf)
