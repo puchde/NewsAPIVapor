@@ -28,6 +28,7 @@ struct GoogleNewsController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
         newsRoute.post(use: scrapeGoogleNews)
+        newsRoute.post("title", use: getNewsTitles)
         newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
         newsRoute.get("update", use: updateCategoryArticles)
     }
@@ -123,6 +124,69 @@ extension GoogleNewsController {
         print("item memory: \(MemoryLayout.size(ofValue: apiResponse))")
         return apiResponse
     }
+    
+    //MARK: - Title
+    func getNewsTitles(req: Request) async throws -> NewsTitleResponse {
+        
+        let queryParameters = try req.query.decode(NewsQueryParameters.self)
+        
+        guard let type = urlType(rawValue: queryParameters.type),
+              let country = CountryCode(rawValue: queryParameters.country) else {
+            return NewsTitleResponse(status: "N", totalResults: 0, articles: [])
+        }
+        
+        // MARK: - Get Data URL And Check Defualt Articles Data
+        var url = ""
+        var cacheKey = "\(type)+\(country)"
+        
+        switch type {
+        case .topics:
+            guard let categoryStr = queryParameters.category, let category = Category(rawValue: categoryStr) else {
+                return NewsTitleResponse(status: "N", totalResults: 0, articles: [])
+            }
+            
+            cacheKey += "+\(categoryStr)"
+            
+            // MARK: - 取得Topics網址path
+            if newsManager.topicsPathDic[category] == nil {
+                _ = try await updateNewsCategory(req: req)
+            }
+            
+            url = newsManager.getUrl(type: type, country: country, category: category)
+        default:
+            return NewsTitleResponse(status: "N", totalResults: 0, articles: [])
+        }
+        
+        /// Prepare Data
+        var titles = [NewsTitleObject]()
+        
+        // 使用 Vapor 的 client 發送 HTTP 請求
+        let result = try await req.client.get(URI(string: url))
+
+        guard result.status == .ok else {
+            throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
+        }
+        
+        guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
+            throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
+        }
+
+        // 使用 SwiftSoup 解析 HTML
+        let document = try SwiftSoup.parse(html)
+        
+        _ = try document.getElementsByTag("article").map { e in
+            var title = try e.getElementsByTag("a").filter{a in try !a.text().isEmpty}.first?.text() ?? ""
+            
+            let titleObj = NewsTitleObject(title: title)
+            
+            titles.append(titleObj)
+        }
+        
+        let apiResponse = NewsTitleResponse(status: "OK", totalResults: titles.count, articles: titles)
+        
+        return apiResponse
+    }
+
     
     // MARK: - base/protobuf
     func scrapeGoogleNewsProtobuf(req: Request) async throws -> NewsAPIProtobufResponse {

@@ -41,3 +41,14 @@ struct NewsAPIProtobufResponse: Content {
     let totalResults: Int
     let articles: Data
 }
+
+//MARK: - Title
+struct NewsTitleResponse: Content {
+    let status: String
+    let totalResults: Int
+    let articles: [NewsTitleObject]
+}
+
+struct NewsTitleObject: Codable {
+    let title: String
+}
