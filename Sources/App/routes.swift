@@ -11,4 +11,7 @@ func routes(_ app: Application) throws {
     
     let googleNewsController = GoogleNewsController()
     try app.register(collection: googleNewsController)
+    
+    let firebaseViewController = FirebaseViewController()
+    try app.register(collection: firebaseViewController)
 }

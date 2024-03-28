@@ -6,6 +6,7 @@ var app: Application!
 var appCache = app.cache
 
 var newsManager = NewsConfigManager.shared
+var fcmManager = FCMConfigManager.shared
 
 /// This extension is temporary and can be removed once Vapor gets this support.
 private extension Vapor.Application {
