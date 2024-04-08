@@ -49,6 +49,7 @@ struct NewsTitleResponse: Content {
     let articles: [NewsTitleObject]
 }
 
-struct NewsTitleObject: Codable {
+struct NewsTitleObject: Content, Codable {
     let title: String
+    let url: String
 }

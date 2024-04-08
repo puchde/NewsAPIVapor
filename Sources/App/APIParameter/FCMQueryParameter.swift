@@ -8,5 +8,5 @@
 import Vapor
 
 struct FCMQueryParameter: Content {
-    var category: String  // Assuming Category is a String
+    var country: String
 }

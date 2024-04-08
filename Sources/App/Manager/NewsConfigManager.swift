@@ -19,6 +19,22 @@ class NewsConfigManager {
     
     var topicsPathDic = [Category: String]()
     var topicsRegionPathDic = [CountryCode: String]()
+    
+    // MARK: - Cache Key
+    func getKey(isProtobuf: Bool, country: CountryCode, category: Category, isNotification: Bool) -> String {
+        var key = isProtobuf ? "Protobuf+" : ""
+        key += "\(urlType.topics.rawValue)+\(country.rawValue)+\(category.rawValue)"
+        if isNotification {
+            key += "+Notificaiton"
+        }
+        return key
+    }
+    
+    func getKey(isProtobuf: Bool, country: CountryCode, queryString: String, searchTime: String) -> String {
+        var key = isProtobuf ? "Protobuf+" : ""
+        key += "\(urlType.search.rawValue)+\(country.rawValue)+\(queryString)+\(searchTime)"
+        return key
+    }
 }
 
 // MARK: - Get API Type URL

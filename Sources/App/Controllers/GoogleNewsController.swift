@@ -28,7 +28,6 @@ struct GoogleNewsController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let newsRoute = routes.grouped("googlenews")
         newsRoute.post(use: scrapeGoogleNews)
-        newsRoute.post("title", use: getNewsTitles)
         newsRoute.post("protobuf", use: scrapeGoogleNewsProtobuf)
         newsRoute.get("update", use: updateCategoryArticles)
     }
@@ -47,7 +46,7 @@ extension GoogleNewsController {
         
         // MARK: - Get Data URL And Check Defualt Articles Data
         var url = ""
-        var cacheKey = "\(type)+\(country)"
+        var cacheKey = ""
         let formatter = DateFormatter()
         formatter.dateFormat = "yyMMddHHmmss"
         
@@ -57,7 +56,7 @@ extension GoogleNewsController {
                 return NewsAPIResponse(status: "N", totalResults: 0, articles: [])
             }
             
-            cacheKey += "+\(categoryStr)"
+            cacheKey = newsManager.getKey(isProtobuf: false, country: country, category: category, isNotification: false)
             
             // MARK: - 取得Topics網址path
             if newsManager.topicsPathDic[category] == nil {
@@ -68,7 +67,7 @@ extension GoogleNewsController {
         case .search:
             let queryString = queryParameters.q
             let searchTime = queryParameters.searchTime ?? ""
-            cacheKey += "+\(String(describing: queryString))+\(searchTime)"
+            cacheKey = newsManager.getKey(isProtobuf: false, country: country, queryString: String(describing: queryString), searchTime: searchTime)
             url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime)
         default:
             return NewsAPIResponse(status: "N", totalResults: 0, articles: [])
@@ -125,69 +124,6 @@ extension GoogleNewsController {
         return apiResponse
     }
     
-    //MARK: - Title
-    func getNewsTitles(req: Request) async throws -> NewsTitleResponse {
-        
-        let queryParameters = try req.query.decode(NewsQueryParameters.self)
-        
-        guard let type = urlType(rawValue: queryParameters.type),
-              let country = CountryCode(rawValue: queryParameters.country) else {
-            return NewsTitleResponse(status: "N", totalResults: 0, articles: [])
-        }
-        
-        // MARK: - Get Data URL And Check Defualt Articles Data
-        var url = ""
-        var cacheKey = "\(type)+\(country)"
-        
-        switch type {
-        case .topics:
-            guard let categoryStr = queryParameters.category, let category = Category(rawValue: categoryStr) else {
-                return NewsTitleResponse(status: "N", totalResults: 0, articles: [])
-            }
-            
-            cacheKey += "+\(categoryStr)"
-            
-            // MARK: - 取得Topics網址path
-            if newsManager.topicsPathDic[category] == nil {
-                _ = try await updateNewsCategory(req: req)
-            }
-            
-            url = newsManager.getUrl(type: type, country: country, category: category)
-        default:
-            return NewsTitleResponse(status: "N", totalResults: 0, articles: [])
-        }
-        
-        /// Prepare Data
-        var titles = [NewsTitleObject]()
-        
-        // 使用 Vapor 的 client 發送 HTTP 請求
-        let result = try await req.client.get(URI(string: url))
-
-        guard result.status == .ok else {
-            throw Abort(.internalServerError, reason: "無法獲取 Google News 的資訊")
-        }
-        
-        guard let body = result.body, let html = body.getString(at: body.readerIndex, length: body.readableBytes) else {
-            throw Abort(.internalServerError, reason: "無法讀取 HTML 內容")
-        }
-
-        // 使用 SwiftSoup 解析 HTML
-        let document = try SwiftSoup.parse(html)
-        
-        _ = try document.getElementsByTag("article").map { e in
-            var title = try e.getElementsByTag("a").filter{a in try !a.text().isEmpty}.first?.text() ?? ""
-            
-            let titleObj = NewsTitleObject(title: title)
-            
-            titles.append(titleObj)
-        }
-        
-        let apiResponse = NewsTitleResponse(status: "OK", totalResults: titles.count, articles: titles)
-        
-        return apiResponse
-    }
-
-    
     // MARK: - base/protobuf
     func scrapeGoogleNewsProtobuf(req: Request) async throws -> NewsAPIProtobufResponse {
         
@@ -201,7 +137,8 @@ extension GoogleNewsController {
         
         // MARK: - Get Data URL And Check Defualt Articles Data
         var url = ""
-        var cacheKey = "Protobuf+\(type)+\(country)"
+        var cacheKey = ""
+        var notificationCacheKey = ""
         let formatter = DateFormatter()
         formatter.dateFormat = "yyMMddHHmmss"
 
@@ -214,8 +151,8 @@ extension GoogleNewsController {
                 print("Category Error: \(queryParameters.category ?? "Not Para")")
                 return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
             }
-            
-            cacheKey += "+\(categoryStr)"
+            cacheKey = newsManager.getKey(isProtobuf: true, country: country, category: category, isNotification: false)
+            notificationCacheKey = newsManager.getKey(isProtobuf: true, country: country, category: category, isNotification: true)
             
             // MARK: - 取得Topics網址path
             if newsManager.topicsPathDic[category] == nil {
@@ -226,7 +163,7 @@ extension GoogleNewsController {
         case .search:
             let queryString = queryParameters.q ?? ""
             let searchTime = queryParameters.searchTime ?? ""
-            cacheKey += "+\(String(describing: queryString))+\(searchTime)"
+            cacheKey = newsManager.getKey(isProtobuf: true, country: country, queryString: String(describing: queryString), searchTime: searchTime)
             url = newsManager.getUrl(type: type, country: country, q: queryString, qSearchTime: searchTime, isRss: true)
         default:
             return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
@@ -249,7 +186,7 @@ extension GoogleNewsController {
                 let data = await getNewsDataRss(req: req, url: url, cacheKey: cacheKey)
                 return sortNews(response: data, searchSort: searchSort)
             case .topics:
-                return await getNewsData(req: req, url: url, cacheKey: cacheKey)
+                return await getNewsData(req: req, url: url, cacheKey: cacheKey, notificationCacheKey: notificationCacheKey)
             default:
                 return NewsAPIProtobufResponse(status: "N", totalResults: 0, articles: Data())
             }
@@ -271,9 +208,10 @@ extension GoogleNewsController {
                 let url = newsManager.getUrl(type: .topics, country: country, category: category)
                 print(url)
                 Task {
-                    let cacheKey = "Protobuf+\(urlType.topics)+\(country)+\(category)"
+                    let cacheKey = newsManager.getKey(isProtobuf: true, country: country, category: category, isNotification: false)
+                    let notificationCacheKey = newsManager.getKey(isProtobuf: true, country: country, category: category, isNotification: true)
                     print("update: \(cacheKey)")
-                    _ = await getNewsData(req: req, url: url, cacheKey: cacheKey)
+                    _ = await getNewsData(req: req, url: url, cacheKey: cacheKey, notificationCacheKey: notificationCacheKey)
                 }
             }
         } else {
@@ -285,9 +223,10 @@ extension GoogleNewsController {
                     let url = newsManager.getUrl(type: .topics, country: country, category: category)
                     print(url)
                     Task {
-                        let cacheKey = "Protobuf+\(urlType.topics)+\(country)+\(category)"
+                        let cacheKey = newsManager.getKey(isProtobuf: true, country: country, category: category, isNotification: false)
+                        let notificationCacheKey = newsManager.getKey(isProtobuf: true, country: country, category: category, isNotification: true)
                         print("update: \(cacheKey)")
-                        _ = await getNewsData(req: req, url: url, cacheKey: cacheKey)
+                        _ = await getNewsData(req: req, url: url, cacheKey: cacheKey, notificationCacheKey: notificationCacheKey)
                     }
                 }
             }
@@ -298,8 +237,10 @@ extension GoogleNewsController {
 
 // MARK: - 取得News (Category & Search)
 extension GoogleNewsController {
-    func getNewsData(req: Request, url: String, cacheKey: String) async -> NewsAPIProtobufResponse {
+    func getNewsData(req: Request, url: String, cacheKey: String, notificationCacheKey: String) async -> NewsAPIProtobufResponse {
         do {
+            /// FCM
+            var notificationNews: [NewsTitleObject] = []
             /// Prepare Data
             var articleProtobufs: [ArticleProtobuf] = []
             // 使用 Vapor 的 client 發送 HTTP 請求
@@ -329,7 +270,10 @@ extension GoogleNewsController {
                 if !imagePath.isEmpty && !imagePath.contains("http") {
                     imagePath = newsManager.baseUrl + imagePath
                 }
-                //
+                
+                notificationNews.append(NewsTitleObject(title: title, url: url))
+                
+                // Protobuf
                 let sourceProtobuf = try SourceProtobuf.with {
                     $0.id = ""
                     $0.name = try e.getElementsByAttribute("data-n-tid").first()?.text() ?? ""
@@ -355,6 +299,7 @@ extension GoogleNewsController {
             
             let apiProtobufResponse = NewsAPIProtobufResponse(status: "OK", totalResults: articleProtobufs.count, articles: articlesData)
             try await appCache.set(cacheKey, to: apiProtobufResponse, expiresIn: .seconds(1190))
+            try await appCache.set(notificationCacheKey, to: notificationNews, expiresIn: .seconds(1190))
             print("cacheOK: \(cacheKey)")
             return apiProtobufResponse
         } catch {
