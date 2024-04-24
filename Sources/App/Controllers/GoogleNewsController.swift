@@ -435,7 +435,7 @@ extension GoogleNewsController {
             categoryPathArr.remove(at: 1)
             categoryPathArr.remove(at: 1)
             
-            if country == .TW {
+            if country == .US {
                 for i in 0 ..< categoryPathArr.count {
                     let data = categoryPathArr[i]
                     let category = Category.allCases[i]
